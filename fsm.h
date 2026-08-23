@@ -1,0 +1,240 @@
+/*
+ * Copyright 2026 Morozov Oleg and Chirkov Boris
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * KAOS-RT core API.
+ *
+ * Language baseline: ISO C17.
+ * The core is written with MISRA C and SEI CERT C conformance in mind.
+ */
+
+#ifndef FSM_H_
+#define FSM_H_
+
+#include <stdint.h>
+
+#include "fsm_config.h"
+#include "fsm_instance.h"
+#include "fsm_port.h"
+
+#ifndef FSM_PORT_EVENT_POLL_REQUIRES_IRQ_LOCK
+#define FSM_PORT_EVENT_POLL_REQUIRES_IRQ_LOCK  0
+#endif
+
+typedef uint64_t fsm_timer_id_t;
+typedef uint32_t (*fsm_t)(uint32_t state, uint32_t events);
+
+/* Public operation status values: success is always zero. */
+typedef enum
+{
+    FSM_STATUS_OK = 0,
+    FSM_STATUS_INVALID_FSM,
+    FSM_STATUS_INVALID_EVENT,
+    FSM_STATUS_NULL_ARGUMENT
+} fsm_status_t;
+
+/* Event bitmap sentinel and the invalid FSM identifier. */
+#define FSM_EVENTS_NONE      UINT32_C(0)
+#define FSM_INVALID_ID       FSM_LAST
+
+#if (FSM_PROFILE_ENABLE != 0)
+/* Diagnostic-only state; absent from a release build. */
+typedef struct
+{
+    uint32_t calls;
+    uint64_t total_ticks;
+    fsm_profile_tick_t max_ticks;
+} fsm_profile_fsm_t;
+
+typedef struct
+{
+    uint64_t main_loops;
+    fsm_profile_tick_t max_loop_ticks;
+    fsm_profile_tick_t max_timer_service_ticks;
+    uint32_t active_timers;
+    uint32_t peak_active_timers;
+    uint32_t timer_expirations;
+    uint32_t timer_missed_periods;
+    uint32_t timer_allocation_failures;
+    uint32_t event_posts;
+    uint32_t coalesced_event_posts;
+} fsm_profile_system_t;
+#endif
+
+/* A 64-bit timer ID packs a slot number and a non-zero generation. */
+#define FSM_TIMER_INVALID_ID      UINT64_C(0)
+
+#if (FSM_TIMER_COUNT <= UINT32_C(2))
+#  define FSM_TIMER_SLOT_BITS UINT32_C(1)
+#elif (FSM_TIMER_COUNT <= UINT32_C(4))
+#  define FSM_TIMER_SLOT_BITS UINT32_C(2)
+#elif (FSM_TIMER_COUNT <= UINT32_C(8))
+#  define FSM_TIMER_SLOT_BITS UINT32_C(3)
+#elif (FSM_TIMER_COUNT <= UINT32_C(16))
+#  define FSM_TIMER_SLOT_BITS UINT32_C(4)
+#elif (FSM_TIMER_COUNT <= UINT32_C(32))
+#  define FSM_TIMER_SLOT_BITS UINT32_C(5)
+#elif (FSM_TIMER_COUNT <= UINT32_C(64))
+#  define FSM_TIMER_SLOT_BITS UINT32_C(6)
+#elif (FSM_TIMER_COUNT <= UINT32_C(128))
+#  define FSM_TIMER_SLOT_BITS UINT32_C(7)
+#elif (FSM_TIMER_COUNT <= UINT32_C(256))
+#  define FSM_TIMER_SLOT_BITS UINT32_C(8)
+#else
+#  error "FSM_TIMER_COUNT exceeds timer handle capacity"
+#  define FSM_TIMER_SLOT_BITS UINT32_C(8)
+#endif
+
+#define FSM_TIMER_SLOT_MASK       ((UINT64_C(1) << FSM_TIMER_SLOT_BITS) - UINT64_C(1))
+#define FSM_TIMER_GENERATION_MAX  (UINT64_MAX >> FSM_TIMER_SLOT_BITS)
+
+typedef enum
+{
+    FSM_TIMER_REMOVED = 0,
+    FSM_TIMER_NOT_FOUND
+} fsm_timer_result_t;
+
+/* Compile-time configuration contract. */
+_Static_assert(FSM_TICK_FREQ_HZ > UINT32_C(0),
+               "FSM_TICK_FREQ_HZ must be greater than zero");
+
+_Static_assert(FSM_LAST > 0,
+               "At least one FSM must be declared");
+
+_Static_assert(FSM_TIMER_COUNT > UINT32_C(0),
+               "FSM_TIMER_COUNT must be greater than zero");
+
+_Static_assert(FSM_EVENT_COUNT <= UINT32_C(32),
+               "FSM_EVENT_COUNT exceeds event bitmap capacity");
+
+/* Event and logical-time helpers. */
+static inline uint32_t to_events_set(fsm_event_t event)
+{
+    uint32_t event_index = (uint32_t)event;
+    uint32_t mask = UINT32_C(0);
+
+    if (event_index < (uint32_t)FSM_EVENT_COUNT)
+    {
+        mask = UINT32_C(1) << event_index;
+    }
+
+    return mask;
+}
+
+static inline uint32_t have_event(uint32_t events, fsm_event_t event)
+{
+    return events & to_events_set(event);
+}
+
+static inline fsm_time_t fsm_time_from_units(uint32_t value, uint32_t units_per_second)
+{
+    /*
+    * uint64_t is used only for intermediate arithmetic.
+    * Runtime time representation remains fsm_time_t(uint32_t).
+    */
+    uint64_t product;
+    uint64_t ticks;
+
+    if ((value == UINT32_C(0)) || (units_per_second == UINT32_C(0)))
+    {
+        return UINT32_C(0);
+    }
+
+    product = (uint64_t)value * (uint64_t)FSM_TICK_FREQ_HZ;
+    ticks = product / (uint64_t)units_per_second;
+
+    if ((product % (uint64_t)units_per_second) != UINT64_C(0))
+    {
+        ticks += UINT64_C(1);
+    }
+
+    if (ticks > (uint64_t)UINT32_MAX)
+    {
+        return UINT32_C(0);
+    }
+
+    return (fsm_time_t)ticks;
+}
+
+static inline fsm_time_t fsm_time_from_us(uint32_t value)
+{
+    return fsm_time_from_units(value, UINT32_C(1000000));
+}
+
+static inline fsm_time_t fsm_time_from_ms(uint32_t value)
+{
+    return fsm_time_from_units(value, UINT32_C(1000));
+}
+
+static inline fsm_time_t fsm_time_from_s(uint32_t value)
+{
+    return fsm_time_from_units(value, UINT32_C(1));
+}
+
+/* Compact timer-handle helpers. */
+static inline fsm_timer_id_t fsm_timer_make_id(uint32_t slot, uint64_t generation)
+{
+    if ((slot >= (uint32_t)FSM_TIMER_COUNT) || (generation == UINT64_C(0)) || (generation > FSM_TIMER_GENERATION_MAX))
+    {
+        return FSM_TIMER_INVALID_ID;
+    }
+
+    return (generation << FSM_TIMER_SLOT_BITS) | (fsm_timer_id_t)slot;
+}
+
+static inline uint32_t fsm_timer_get_slot(fsm_timer_id_t id)
+{
+    return (uint32_t)(id & FSM_TIMER_SLOT_MASK);
+}
+
+static inline uint64_t fsm_timer_get_generation(fsm_timer_id_t id)
+{
+    return id >> FSM_TIMER_SLOT_BITS;
+}
+
+static inline uint32_t fsm_timer_is_valid(fsm_timer_id_t id)
+{
+    uint32_t slot = (uint32_t)(id & FSM_TIMER_SLOT_MASK);
+    uint64_t generation = id >> FSM_TIMER_SLOT_BITS;
+
+    return (uint32_t)((id != FSM_TIMER_INVALID_ID) && (slot < FSM_TIMER_COUNT) && (generation > UINT64_C(0)) && (generation <= FSM_TIMER_GENERATION_MAX));
+}
+
+/* Dispatcher lifecycle. */
+void start_fsm(void);
+void main_fsm(void);
+
+/* Optional bounded hook, called once at the beginning of every dispatcher pass. */
+void fsm_loop_service(void);
+
+/* FSM lifecycle and state diagnosis. */
+fsm_t set_fsm(fsm_id_t fsm, fsm_t callback);
+fsm_t remove_fsm(fsm_id_t fsm);
+fsm_status_t get_fsm_state(fsm_id_t fsm, uint32_t *state);
+
+/* Event bitmap API; only append_event() is ISR-safe. */
+fsm_status_t append_event(fsm_id_t fsm, fsm_event_t event);
+fsm_status_t remove_event(fsm_id_t fsm, fsm_event_t event);
+fsm_status_t remove_events(fsm_id_t fsm);
+
+/* Timer API. Delay and period are logical ticks. */
+fsm_timer_id_t add_timer(fsm_id_t fsm, fsm_time_t delay, uint32_t events);
+fsm_timer_id_t add_periodical_timer(fsm_id_t fsm, fsm_time_t period, uint32_t events);
+fsm_timer_result_t remove_timer(fsm_timer_id_t timer_id);
+void remove_timers(fsm_id_t fsm);
+
+#if (FSM_PROFILE_ENABLE != 0)
+/* Snapshot diagnostics; never use these values as release timing acceptance. */
+fsm_status_t fsm_profile_get_fsm(fsm_id_t fsm, fsm_profile_fsm_t *profile);
+fsm_status_t fsm_profile_get_system(fsm_profile_system_t *profile);
+#endif
+
+#if (FSM_TEST_ENABLE != 0)
+/* Test build only: execute one complete main-loop pass and return. */
+void fsm_test_run_once(void);
+
+/* Test build only: prepare a free timer slot for generation-wrap testing. */
+void fsm_test_force_timer_generation(uint32_t slot, uint64_t generation);
+#endif
+
+#endif /* FSM_H_ */

@@ -1,0 +1,43 @@
+# Публичный репозиторий содержит только исходники, конфигурацию и документацию.
+*
+
+# Разрешить обход каталогов с отслеживаемыми файлами.
+!*/
+
+# Исходники ядра и платформ.
+!*.c
+!*.h
+!*.s
+!*.S
+!*.ld
+
+# Конфигурация сборки.
+!*.cmake
+!CMakeLists.txt
+!CMakePresets.json
+!Makefile
+!makefile
+!*.json
+
+# Документация и метаданные репозитория.
+!.editorconfig
+!.gitattributes
+!.gitignore
+!README.md
+!CHANGELOG.md
+!CONTRIBUTING.md
+!LICENSE
+!*.md
+
+# Генерируемые артефакты остаются локальными.
+build/
+cmake-build-*/
+*.d
+*.elf
+*.bin
+*.hex
+*.map
+*.o
+*.su
+compile_commands.json
+.DS_Store

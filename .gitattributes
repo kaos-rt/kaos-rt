@@ -1,0 +1,28 @@
+# Текстовые файлы используют LF на любой платформе разработчика.
+* text=auto eol=lf
+
+*.c text eol=lf
+*.h text eol=lf
+*.S text eol=lf
+*.s text eol=lf
+*.ld text eol=lf
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf
+CMakePresets.json text eol=lf
+Makefile text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+
+# Образы прошивок, архивы и графика не являются построчными файлами.
+*.a binary
+*.bin binary
+*.elf binary
+*.hex binary
+*.map binary
+*.o binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.zip binary
