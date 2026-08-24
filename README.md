@@ -1,5 +1,9 @@
 # KAOS-RT
 
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+![Language: ISO C17](https://img.shields.io/badge/language-ISO%20C17-informational.svg)
+![Status: Technical preview](https://img.shields.io/badge/status-technical%20preview-orange.svg)
+
 KAOS-RT — компактное кооперативное ядро для одноядерных 32-разрядных
 микроконтроллеров. Оно помогает строить прикладное ПО как набор конечных
 автоматов: автомат получает накопленную маску событий, выполняет короткий шаг
