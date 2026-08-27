@@ -4,7 +4,7 @@
 
 static volatile uint32_t fsm_port_tim2_overflow_count;
 
-void fsm_port_uptime_init(void)
+void port_uptime_init(void)
 {
     fsm_port_tim2_overflow_count = UINT32_C(0);
     TIM2->SR = UINT32_C(0);
@@ -12,7 +12,7 @@ void fsm_port_uptime_init(void)
     FSM_PORT_NVIC_ISER0 = FSM_PORT_TIM2_IRQ_MASK;
 }
 
-fsm_uptime_t fsm_port_uptime(void)
+uint64_t port_uptime_usec(void)
 {
     uint32_t overflow_before;
     uint32_t overflow_after;
@@ -39,7 +39,9 @@ fsm_uptime_t fsm_port_uptime(void)
         }
     }
 
-    return ((fsm_uptime_t)overflow_before << 32) | (fsm_uptime_t)counter;
+    uint64_t ticks = ((uint64_t)overflow_before << 32) | (uint64_t)counter;
+
+    return ticks * (uint64_t)PORT_UPTIME_USEC_PER_TICK;
 }
 
 void TIM2_IRQHandler(void)

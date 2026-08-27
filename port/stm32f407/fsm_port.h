@@ -24,7 +24,6 @@
 
 /* Core-visible port types. */
 typedef uint32_t fsm_time_t;
-typedef uint64_t fsm_uptime_t;
 typedef uint32_t fsm_irq_state_t;
 typedef uint32_t fsm_profile_tick_t;
 
@@ -58,8 +57,14 @@ _Static_assert(
     (FSM_TIMER_CLOCK_HZ / FSM_TICK_FREQ_HZ) <= UINT32_C(65536),
     "TIM2 prescaler does not fit into 16 bits");
 
-void fsm_port_uptime_init(void);
-fsm_uptime_t fsm_port_uptime(void);
+_Static_assert(
+    (UINT32_C(1000000) % FSM_TICK_FREQ_HZ) == UINT32_C(0),
+    "FSM_TICK_FREQ_HZ must be an integer divisor of 1 MHz for port_uptime_usec");
+
+#define PORT_UPTIME_USEC_PER_TICK  (UINT32_C(1000000) / FSM_TICK_FREQ_HZ)
+
+void port_uptime_init(void);
+uint64_t port_uptime_usec(void);
 
 static inline void fsm_port_time_init(void)
 {
@@ -71,7 +76,7 @@ static inline void fsm_port_time_init(void)
     TIM2->EGR = TIM_EGR_UG;
     TIM2->CNT = UINT32_C(0);
 
-    fsm_port_uptime_init();
+    port_uptime_init();
 
     TIM2->CR1 |= TIM_CR1_CEN;
 }

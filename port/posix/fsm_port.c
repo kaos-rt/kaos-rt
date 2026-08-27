@@ -141,7 +141,7 @@ static fsm_time_t fsm_posix_local_time_ticks(void)
     return (fsm_time_t)ticks;
 }
 
-static fsm_uptime_t fsm_posix_uptime_ticks(int64_t uptime_ns)
+static uint64_t fsm_posix_uptime_usec(int64_t uptime_ns)
 {
     uint64_t seconds;
     uint64_t nanoseconds;
@@ -154,8 +154,7 @@ static fsm_uptime_t fsm_posix_uptime_ticks(int64_t uptime_ns)
     seconds = (uint64_t)(uptime_ns / INT64_C(1000000000));
     nanoseconds = (uint64_t)(uptime_ns % INT64_C(1000000000));
 
-    return (seconds * (uint64_t)FSM_TICK_FREQ_HZ) +
-           ((nanoseconds * (uint64_t)FSM_TICK_FREQ_HZ) / UINT64_C(1000000000));
+    return (seconds * UINT64_C(1000000)) + (nanoseconds / UINT64_C(1000));
 }
 
 void fsm_port_time_init(void)
@@ -200,10 +199,10 @@ fsm_time_t fsm_port_time_now(void)
     return local_time;
 }
 
-fsm_uptime_t fsm_port_uptime(void)
+uint64_t port_uptime_usec(void)
 {
     struct timespec now;
-    fsm_uptime_t uptime;
+    uint64_t uptime;
 
     if (pthread_mutex_lock(&fsm_posix_time_mutex) != 0)
     {
@@ -213,7 +212,7 @@ fsm_uptime_t fsm_port_uptime(void)
     now = fsm_posix_clock_now();
     fsm_posix_advance_local_clock(fsm_posix_elapsed_nanoseconds(fsm_posix_time_previous, now));
     fsm_posix_time_previous = now;
-    uptime = fsm_posix_uptime_ticks(fsm_posix_local_time_ns - fsm_posix_initial_offset_ns);
+    uptime = fsm_posix_uptime_usec(fsm_posix_local_time_ns - fsm_posix_initial_offset_ns);
 
     if (pthread_mutex_unlock(&fsm_posix_time_mutex) != 0)
     {

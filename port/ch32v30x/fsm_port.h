@@ -23,7 +23,6 @@
 #endif
 
 typedef uint32_t fsm_time_t;
-typedef uint64_t fsm_uptime_t;
 typedef uint32_t fsm_irq_state_t;
 typedef uint64_t fsm_profile_tick_t;
 
@@ -51,6 +50,12 @@ typedef struct
 _Static_assert(
     (FSM_SYSTICK_CLOCK_HZ % FSM_TICK_FREQ_HZ) == UINT32_C(0),
     "SysTick clock must be an integer multiple of FSM_TICK_FREQ_HZ");
+
+_Static_assert(
+    (FSM_SYSTICK_CLOCK_HZ % UINT32_C(1000000)) == UINT32_C(0),
+    "SysTick clock must be an integer multiple of 1 MHz");
+
+#define PORT_UPTIME_TICKS_PER_USEC  (FSM_SYSTICK_CLOCK_HZ / UINT32_C(1000000))
 
 static inline uint64_t fsm_port_systick_now(void)
 {
@@ -84,9 +89,9 @@ static inline fsm_time_t fsm_port_time_now(void)
     return (fsm_time_t)(fsm_port_systick_now() / (uint64_t)(FSM_SYSTICK_CLOCK_HZ / FSM_TICK_FREQ_HZ));
 }
 
-static inline fsm_uptime_t fsm_port_uptime(void)
+static inline uint64_t port_uptime_usec(void)
 {
-    return fsm_port_systick_now() / (uint64_t)(FSM_SYSTICK_CLOCK_HZ / FSM_TICK_FREQ_HZ);
+    return fsm_port_systick_now() / (uint64_t)PORT_UPTIME_TICKS_PER_USEC;
 }
 
 static inline void fsm_port_profile_init(void)
