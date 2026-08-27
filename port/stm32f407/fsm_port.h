@@ -24,6 +24,7 @@
 
 /* Core-visible port types. */
 typedef uint32_t fsm_time_t;
+typedef uint64_t fsm_uptime_t;
 typedef uint32_t fsm_irq_state_t;
 typedef uint32_t fsm_profile_tick_t;
 
@@ -33,6 +34,10 @@ typedef uint32_t fsm_profile_tick_t;
 #define FSM_PORT_DWT_CYCCNT       (*(volatile uint32_t *)UINT32_C(0xE0001004))
 #define FSM_PORT_DEMCR_TRCENA     (UINT32_C(1) << 24)
 #define FSM_PORT_DWT_CYCCNTENA    UINT32_C(1)
+#define FSM_PORT_TIM_DIER_UIE     UINT32_C(1)
+#define FSM_PORT_TIM_SR_UIF       UINT32_C(1)
+#define FSM_PORT_NVIC_ISER0       (*(volatile uint32_t *)UINT32_C(0xE000E100))
+#define FSM_PORT_TIM2_IRQ_MASK    (UINT32_C(1) << 28)
 
 /* GNU-compatible compiler extension; record as a MISRA language deviation. */
 #define FSM_PORT_WEAK __attribute__((weak))
@@ -53,6 +58,9 @@ _Static_assert(
     (FSM_TIMER_CLOCK_HZ / FSM_TICK_FREQ_HZ) <= UINT32_C(65536),
     "TIM2 prescaler does not fit into 16 bits");
 
+void fsm_port_uptime_init(void);
+fsm_uptime_t fsm_port_uptime(void);
+
 static inline void fsm_port_time_init(void)
 {
     RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
@@ -62,6 +70,8 @@ static inline void fsm_port_time_init(void)
     TIM2->ARR = UINT32_MAX;
     TIM2->EGR = TIM_EGR_UG;
     TIM2->CNT = UINT32_C(0);
+
+    fsm_port_uptime_init();
 
     TIM2->CR1 |= TIM_CR1_CEN;
 }

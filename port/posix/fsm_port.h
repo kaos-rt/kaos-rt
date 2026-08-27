@@ -8,6 +8,7 @@
  * Профиль PhysicalClock берётся из fsm_instance.h: начальный offset и
  * постоянная ошибка частоты. Положительная ошибка ускоряет, отрицательная
  * замедляет локальный счётчик. По умолчанию оба параметра равны нулю.
+ * Это Level 1 модели PhysicalClock.
  * Профилирование остаётся привязано к CLOCK_MONOTONIC.
  */
 
@@ -25,11 +26,13 @@
 #endif
 
 typedef uint32_t fsm_time_t;
+typedef uint64_t fsm_uptime_t;
 typedef uint32_t fsm_irq_state_t;
 typedef uint32_t fsm_profile_tick_t;
 
 void fsm_port_time_init(void);
 fsm_time_t fsm_port_time_now(void);
+fsm_uptime_t fsm_port_uptime(void);
 void fsm_port_profile_init(void);
 fsm_profile_tick_t fsm_port_profile_now(void);
 fsm_irq_state_t fsm_port_irq_save(void);

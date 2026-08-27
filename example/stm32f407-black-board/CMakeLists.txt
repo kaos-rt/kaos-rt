@@ -32,6 +32,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/files.cmake)
 # Add sources to executable/library
 target_sources(${PROJECT_NAME} PRIVATE
   "${KAOS_ROOT}/fsm.c"
+  "${KAOS_ROOT}/port/stm32f407/fsm_port.c"
 )
 
 # Add include directories

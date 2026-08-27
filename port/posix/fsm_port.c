@@ -31,6 +31,7 @@ static _Thread_local uint32_t fsm_posix_irq_depth;
 static struct timespec fsm_posix_time_previous;
 static struct timespec fsm_posix_profile_base;
 static int64_t fsm_posix_local_time_ns;
+static int64_t fsm_posix_initial_offset_ns;
 static int64_t fsm_posix_frequency_remainder;
 static int32_t fsm_posix_frequency_error_ppb;
 
@@ -140,6 +141,23 @@ static fsm_time_t fsm_posix_local_time_ticks(void)
     return (fsm_time_t)ticks;
 }
 
+static fsm_uptime_t fsm_posix_uptime_ticks(int64_t uptime_ns)
+{
+    uint64_t seconds;
+    uint64_t nanoseconds;
+
+    if (uptime_ns < INT64_C(0))
+    {
+        abort();
+    }
+
+    seconds = (uint64_t)(uptime_ns / INT64_C(1000000000));
+    nanoseconds = (uint64_t)(uptime_ns % INT64_C(1000000000));
+
+    return (seconds * (uint64_t)FSM_TICK_FREQ_HZ) +
+           ((nanoseconds * (uint64_t)FSM_TICK_FREQ_HZ) / UINT64_C(1000000000));
+}
+
 void fsm_port_time_init(void)
 {
     if (pthread_mutex_lock(&fsm_posix_time_mutex) != 0)
@@ -148,7 +166,8 @@ void fsm_port_time_init(void)
     }
 
     fsm_posix_time_previous = fsm_posix_clock_now();
-    fsm_posix_local_time_ns = (int64_t)FSM_INSTANCE_CLOCK_INITIAL_OFFSET_US * INT64_C(1000);
+    fsm_posix_initial_offset_ns = (int64_t)FSM_INSTANCE_CLOCK_INITIAL_OFFSET_US * INT64_C(1000);
+    fsm_posix_local_time_ns = fsm_posix_initial_offset_ns;
     fsm_posix_frequency_remainder = INT64_C(0);
     fsm_posix_frequency_error_ppb = (int32_t)FSM_INSTANCE_CLOCK_FREQUENCY_ERROR_PPB;
 
@@ -179,6 +198,29 @@ fsm_time_t fsm_port_time_now(void)
     }
 
     return local_time;
+}
+
+fsm_uptime_t fsm_port_uptime(void)
+{
+    struct timespec now;
+    fsm_uptime_t uptime;
+
+    if (pthread_mutex_lock(&fsm_posix_time_mutex) != 0)
+    {
+        abort();
+    }
+
+    now = fsm_posix_clock_now();
+    fsm_posix_advance_local_clock(fsm_posix_elapsed_nanoseconds(fsm_posix_time_previous, now));
+    fsm_posix_time_previous = now;
+    uptime = fsm_posix_uptime_ticks(fsm_posix_local_time_ns - fsm_posix_initial_offset_ns);
+
+    if (pthread_mutex_unlock(&fsm_posix_time_mutex) != 0)
+    {
+        abort();
+    }
+
+    return uptime;
 }
 
 void fsm_port_profile_init(void)
