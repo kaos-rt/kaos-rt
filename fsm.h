@@ -31,9 +31,16 @@ typedef struct
     uint32_t mask;
 } fsm_events_t;
 
+typedef struct
+{
+    uint32_t slot;
+    uint32_t generation;
+} fsm_timer_id_t;
+
 _Static_assert(sizeof(fsm_time_t) == sizeof(uint32_t), "fsm_time_t must remain 32-bit");
 _Static_assert(sizeof(fsm_duration_t) == sizeof(uint32_t), "fsm_duration_t must remain 32-bit");
 _Static_assert(sizeof(fsm_events_t) == sizeof(uint32_t), "fsm_events_t must remain 32-bit");
+_Static_assert(sizeof(fsm_timer_id_t) == (sizeof(uint32_t) * 2U), "fsm_timer_id_t must remain two 32-bit words");
 
 #include "fsm_instance.h"
 #include "fsm_port.h"
@@ -42,7 +49,9 @@ _Static_assert(sizeof(fsm_events_t) == sizeof(uint32_t), "fsm_events_t must rema
 #define FSM_PORT_EVENT_POLL_REQUIRES_IRQ_LOCK  0
 #endif
 
-typedef uint64_t fsm_timer_id_t;
+_Static_assert((FSM_PORT_EVENT_POLL_REQUIRES_IRQ_LOCK == 0) || (FSM_PORT_EVENT_POLL_REQUIRES_IRQ_LOCK == 1),
+               "FSM_PORT_EVENT_POLL_REQUIRES_IRQ_LOCK must be 0 or 1");
+
 typedef uint32_t (*fsm_t)(uint32_t state, fsm_events_t events);
 
 /* Public operation status values: success is always zero. */
@@ -82,32 +91,8 @@ typedef struct
 } fsm_profile_system_t;
 #endif
 
-/* A 64-bit timer ID packs a slot number and a non-zero generation. */
-#define FSM_TIMER_INVALID_ID      UINT64_C(0)
-
-#if (FSM_TIMER_COUNT <= UINT32_C(2))
-#  define FSM_TIMER_SLOT_BITS UINT32_C(1)
-#elif (FSM_TIMER_COUNT <= UINT32_C(4))
-#  define FSM_TIMER_SLOT_BITS UINT32_C(2)
-#elif (FSM_TIMER_COUNT <= UINT32_C(8))
-#  define FSM_TIMER_SLOT_BITS UINT32_C(3)
-#elif (FSM_TIMER_COUNT <= UINT32_C(16))
-#  define FSM_TIMER_SLOT_BITS UINT32_C(4)
-#elif (FSM_TIMER_COUNT <= UINT32_C(32))
-#  define FSM_TIMER_SLOT_BITS UINT32_C(5)
-#elif (FSM_TIMER_COUNT <= UINT32_C(64))
-#  define FSM_TIMER_SLOT_BITS UINT32_C(6)
-#elif (FSM_TIMER_COUNT <= UINT32_C(128))
-#  define FSM_TIMER_SLOT_BITS UINT32_C(7)
-#elif (FSM_TIMER_COUNT <= UINT32_C(256))
-#  define FSM_TIMER_SLOT_BITS UINT32_C(8)
-#else
-#  error "FSM_TIMER_COUNT exceeds timer handle capacity"
-#  define FSM_TIMER_SLOT_BITS UINT32_C(8)
-#endif
-
-#define FSM_TIMER_SLOT_MASK       ((UINT64_C(1) << FSM_TIMER_SLOT_BITS) - UINT64_C(1))
-#define FSM_TIMER_GENERATION_MAX  (UINT64_MAX >> FSM_TIMER_SLOT_BITS)
+/* A timer ID contains its slot and a non-zero reuse generation. */
+#define FSM_TIMER_INVALID_ID      ((fsm_timer_id_t){ .slot = UINT32_C(0), .generation = UINT32_C(0) })
 
 typedef enum
 {
@@ -125,8 +110,20 @@ _Static_assert(FSM_LAST > 0,
 _Static_assert(FSM_TIMER_COUNT > UINT32_C(0),
                "FSM_TIMER_COUNT must be greater than zero");
 
+_Static_assert(FSM_TIMER_COUNT <= UINT32_C(256),
+               "FSM_TIMER_COUNT exceeds the supported capacity");
+
+_Static_assert(FSM_EVENT_COUNT > 0,
+               "At least one event must be declared");
+
 _Static_assert(FSM_EVENT_COUNT <= UINT32_C(32),
                "FSM_EVENT_COUNT exceeds event bitmap capacity");
+
+_Static_assert((FSM_PROFILE_ENABLE == 0) || (FSM_PROFILE_ENABLE == 1),
+               "FSM_PROFILE_ENABLE must be 0 or 1");
+
+_Static_assert((FSM_TEST_ENABLE == 0) || (FSM_TEST_ENABLE == 1),
+               "FSM_TEST_ENABLE must be 0 or 1");
 
 /* Event and logical-time helpers. */
 static inline fsm_events_t to_events_set(fsm_event_t event)
@@ -150,6 +147,13 @@ static inline fsm_events_t fsm_events_union(fsm_events_t left, fsm_events_t righ
 static inline uint32_t fsm_events_is_empty(fsm_events_t events)
 {
     return (uint32_t)(events.mask == UINT32_C(0));
+}
+
+static inline uint32_t fsm_events_are_valid(fsm_events_t events)
+{
+    uint32_t valid_mask = UINT32_MAX >> (UINT32_C(32) - (uint32_t)FSM_EVENT_COUNT);
+
+    return (uint32_t)((events.mask & ~valid_mask) == UINT32_C(0));
 }
 
 static inline uint32_t have_event(fsm_events_t events, fsm_event_t event)
@@ -202,33 +206,36 @@ static inline fsm_duration_t fsm_duration_from_s(uint32_t value)
     return fsm_duration_from_units(value, UINT32_C(1));
 }
 
-/* Compact timer-handle helpers. */
-static inline fsm_timer_id_t fsm_timer_make_id(uint32_t slot, uint64_t generation)
+static inline fsm_duration_t fsm_time_elapsed(fsm_time_t since, fsm_time_t now)
 {
-    if ((slot >= (uint32_t)FSM_TIMER_COUNT) || (generation == UINT64_C(0)) || (generation > FSM_TIMER_GENERATION_MAX))
+    /* Unsigned subtraction preserves elapsed time across one counter wrap. */
+    return (fsm_duration_t){ .ticks = now.ticks - since.ticks };
+}
+
+/* Timer-handle helpers. */
+static inline fsm_timer_id_t fsm_timer_make_id(uint32_t slot, uint32_t generation)
+{
+    if ((slot >= (uint32_t)FSM_TIMER_COUNT) || (generation == UINT32_C(0)))
     {
         return FSM_TIMER_INVALID_ID;
     }
 
-    return (generation << FSM_TIMER_SLOT_BITS) | (fsm_timer_id_t)slot;
+    return (fsm_timer_id_t){ .slot = slot, .generation = generation };
 }
 
 static inline uint32_t fsm_timer_get_slot(fsm_timer_id_t id)
 {
-    return (uint32_t)(id & FSM_TIMER_SLOT_MASK);
+    return id.slot;
 }
 
-static inline uint64_t fsm_timer_get_generation(fsm_timer_id_t id)
+static inline uint32_t fsm_timer_get_generation(fsm_timer_id_t id)
 {
-    return id >> FSM_TIMER_SLOT_BITS;
+    return id.generation;
 }
 
 static inline uint32_t fsm_timer_is_valid(fsm_timer_id_t id)
 {
-    uint32_t slot = (uint32_t)(id & FSM_TIMER_SLOT_MASK);
-    uint64_t generation = id >> FSM_TIMER_SLOT_BITS;
-
-    return (uint32_t)((id != FSM_TIMER_INVALID_ID) && (slot < FSM_TIMER_COUNT) && (generation > UINT64_C(0)) && (generation <= FSM_TIMER_GENERATION_MAX));
+    return (uint32_t)((id.slot < (uint32_t)FSM_TIMER_COUNT) && (id.generation != UINT32_C(0)));
 }
 
 /* Dispatcher lifecycle. */
@@ -265,7 +272,7 @@ fsm_status_t fsm_profile_get_system(fsm_profile_system_t *profile);
 void fsm_test_run_once(void);
 
 /* Test build only: prepare a free timer slot for generation-wrap testing. */
-void fsm_test_force_timer_generation(uint32_t slot, uint64_t generation);
+void fsm_test_force_timer_generation(uint32_t slot, uint32_t generation);
 #endif
 
 #endif /* FSM_H_ */

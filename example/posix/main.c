@@ -95,7 +95,7 @@ int main(void)
     periodic_timer = add_periodical_timer(FSM_CONTROLLER, fsm_duration_from_ms(UINT32_C(100)), to_events_set(FSM_CONTROLLER_STEP));
     one_shot_timer = add_timer(FSM_ONE_SHOT, fsm_duration_from_ms(UINT32_C(250)), to_events_set(FSM_ONE_SHOT_EXPIRED));
 
-    if ((periodic_timer == FSM_TIMER_INVALID_ID) || (one_shot_timer == FSM_TIMER_INVALID_ID))
+    if ((fsm_timer_is_valid(periodic_timer) == UINT32_C(0)) || (fsm_timer_is_valid(one_shot_timer) == UINT32_C(0)))
     {
         return 2;
     }

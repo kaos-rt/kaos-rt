@@ -27,7 +27,7 @@ typedef struct
     fsm_duration_t period;
     fsm_events_t events;
     fsm_id_t fsm;
-    uint64_t generation;
+    uint32_t generation;
 } fsm_timer_t;
 
 /* All mutable kernel state remains private to this translation unit. */
@@ -75,7 +75,7 @@ void start_fsm(void)
         fsm_time_table[i].period.ticks = UINT32_C(0);
         fsm_time_table[i].events = FSM_EVENTS_NONE;
         fsm_time_table[i].fsm = FSM_INVALID_ID;
-        fsm_time_table[i].generation = UINT64_C(0);
+        fsm_time_table[i].generation = UINT32_C(0);
     }
 
     for (i = UINT32_C(0); i < (uint32_t)FSM_LAST; ++i)
@@ -104,9 +104,8 @@ void start_fsm(void)
 
 static fsm_duration_t elapsed_time(void)
 {
-    /* Unsigned subtraction preserves elapsed time across one counter wrap. */
     fsm_time_t now = fsm_port_time_now();
-    fsm_duration_t elapsed = { .ticks = now.ticks - fsm_last_time.ticks };
+    fsm_duration_t elapsed = fsm_time_elapsed(fsm_last_time, now);
 
     fsm_last_time = now;
 
@@ -291,14 +290,18 @@ fsm_status_t remove_events(fsm_id_t fsm)
 }
 
 /* Timer allocation and lifetime. */
-static uint64_t next_timer_generation(uint64_t generation)
+/*
+ * A generation wraps after 2^32 reuses of one slot: about 136 years at
+ * 1 reuse/s, 497 days at 100 reuses/s, or 50 days at 1000 reuses/s.
+ */
+static uint32_t next_timer_generation(uint32_t generation)
 {
-    if (generation >= FSM_TIMER_GENERATION_MAX)
+    if (generation == UINT32_MAX)
     {
-        return UINT64_C(1);
+        return UINT32_C(1);
     }
 
-    return generation + UINT64_C(1);
+    return generation + UINT32_C(1);
 }
 
 static fsm_timer_id_t add_timer_internal(fsm_id_t fsm, fsm_duration_t delay, fsm_duration_t period, fsm_events_t events)
@@ -307,13 +310,14 @@ static fsm_timer_id_t add_timer_internal(fsm_id_t fsm, fsm_duration_t delay, fsm
     uint32_t i;
     uint32_t probe;
 
-    if ((valid_fsm(fsm) == UINT32_C(0)) || (delay.ticks == UINT32_C(0)) || (fsm_events_is_empty(events) != UINT32_C(0)))
+    if ((valid_fsm(fsm) == UINT32_C(0)) || (delay.ticks == UINT32_C(0)) 
+        || (fsm_events_is_empty(events) != UINT32_C(0)) || (fsm_events_are_valid(events) == UINT32_C(0)))
     {
         return FSM_TIMER_INVALID_ID;
     }
 
     /* A timer starts at this call, not at the preceding timer-service phase. */
-    elapsed_since_timer_service.ticks = fsm_port_time_now().ticks - fsm_last_time.ticks;
+    elapsed_since_timer_service = fsm_time_elapsed(fsm_last_time, fsm_port_time_now());
 
     if (delay.ticks > (UINT32_MAX - elapsed_since_timer_service.ticks))
     {
@@ -332,7 +336,7 @@ static fsm_timer_id_t add_timer_internal(fsm_id_t fsm, fsm_duration_t delay, fsm
 
         if (fsm_time_table[i].delta.ticks == UINT32_C(0))
         {
-            uint64_t generation = next_timer_generation(fsm_time_table[i].generation);
+            uint32_t generation = next_timer_generation(fsm_time_table[i].generation);
 
             fsm_time_table[i].delta.ticks = delay.ticks + elapsed_since_timer_service.ticks;
             fsm_time_table[i].period = period;
@@ -392,7 +396,7 @@ static inline void clear_timer_slot(uint32_t slot)
 fsm_timer_result_t remove_timer(fsm_timer_id_t timer_id)
 {
     uint32_t slot;
-    uint64_t generation;
+    uint32_t generation;
 
     if (fsm_timer_is_valid(timer_id) == UINT32_C(0))
     {
@@ -599,10 +603,9 @@ void fsm_test_run_once(void)
     main_fsm();
 }
 
-void fsm_test_force_timer_generation(uint32_t slot, uint64_t generation)
+void fsm_test_force_timer_generation(uint32_t slot, uint32_t generation)
 {
-    if ((slot < (uint32_t)FSM_TIMER_COUNT) &&
-        (fsm_time_table[slot].delta.ticks == UINT32_C(0)))
+    if ((slot < (uint32_t)FSM_TIMER_COUNT) && (fsm_time_table[slot].delta.ticks == UINT32_C(0)))
     {
         fsm_time_table[slot].generation = generation;
     }
