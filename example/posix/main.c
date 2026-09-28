@@ -14,14 +14,14 @@ static atomic_uint_fast32_t controller_wakeups;
 static atomic_uint_fast32_t one_shot_completed;
 
 /* KAOS-SRS-002: callback выполняет только короткий неблокирующий шаг. */
-static uint32_t controller_fsm(uint32_t state, uint32_t events)
+static uint32_t controller_fsm(uint32_t state, fsm_events_t events)
 {
-    if (have_event(events, FSM_CONTROLLER_STEP) != FSM_EVENTS_NONE)
+    if (have_event(events, FSM_CONTROLLER_STEP) != UINT32_C(0))
     {
         (void)atomic_fetch_add_explicit(&controller_steps, UINT32_C(1), memory_order_relaxed);
     }
 
-    if (have_event(events, FSM_CONTROLLER_WAKEUP) != FSM_EVENTS_NONE)
+    if (have_event(events, FSM_CONTROLLER_WAKEUP) != UINT32_C(0))
     {
         (void)atomic_fetch_add_explicit(&controller_wakeups, UINT32_C(1), memory_order_relaxed);
     }
@@ -30,9 +30,9 @@ static uint32_t controller_fsm(uint32_t state, uint32_t events)
 }
 
 /* KAOS-SRS-004: автомат может удалить собственный слот после завершения работы. */
-static uint32_t one_shot_fsm(uint32_t state, uint32_t events)
+static uint32_t one_shot_fsm(uint32_t state, fsm_events_t events)
 {
-    if (have_event(events, FSM_ONE_SHOT_EXPIRED) != FSM_EVENTS_NONE)
+    if (have_event(events, FSM_ONE_SHOT_EXPIRED) != UINT32_C(0))
     {
         atomic_store_explicit(&one_shot_completed, UINT32_C(1), memory_order_relaxed);
         (void)remove_fsm(FSM_ONE_SHOT);

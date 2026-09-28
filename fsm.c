@@ -25,7 +25,7 @@ typedef struct
     /* A zero delta denotes a free timer slot; active timers always have delta > 0. */
     fsm_duration_t delta;
     fsm_duration_t period;
-    uint32_t events;
+    fsm_events_t events;
     fsm_id_t fsm;
     uint64_t generation;
 } fsm_timer_t;
@@ -53,7 +53,7 @@ static uint32_t valid_event(fsm_event_t event)
 }
 
 /* A removed slot remains dispatchable, but deliberately has no side effects. */
-static uint32_t null_fsm(uint32_t state, uint32_t events)
+static uint32_t null_fsm(uint32_t state, fsm_events_t events)
 {
     (void)events;
     return state;
@@ -73,7 +73,7 @@ void start_fsm(void)
     {
         fsm_time_table[i].delta.ticks = UINT32_C(0);
         fsm_time_table[i].period.ticks = UINT32_C(0);
-        fsm_time_table[i].events = UINT32_C(0);
+        fsm_time_table[i].events = FSM_EVENTS_NONE;
         fsm_time_table[i].fsm = FSM_INVALID_ID;
         fsm_time_table[i].generation = UINT64_C(0);
     }
@@ -212,13 +212,13 @@ fsm_status_t fsm_profile_get_system(fsm_profile_system_t *profile)
 #endif
 
 /* Event API. append_event() is the only public API permitted from an ISR. */
-static void post_events(fsm_id_t fsm, uint32_t events)
+static void post_events(fsm_id_t fsm, fsm_events_t events)
 {
     /* Keep the bitmap update atomic with dispatcher take-and-clear. */
     fsm_irq_state_t irq_state = fsm_port_irq_save();
 
 #if (FSM_PROFILE_ENABLE != 0)
-    if ((fsm_table[(uint32_t)fsm].events_set & events) != UINT32_C(0))
+    if ((fsm_table[(uint32_t)fsm].events_set & events.mask) != UINT32_C(0))
     {
         fsm_profile_system.coalesced_event_posts += UINT32_C(1);
     }
@@ -226,7 +226,7 @@ static void post_events(fsm_id_t fsm, uint32_t events)
     fsm_profile_system.event_posts += UINT32_C(1);
 #endif
 
-    fsm_table[(uint32_t)fsm].events_set |= events;
+    fsm_table[(uint32_t)fsm].events_set |= events.mask;
 
     fsm_port_irq_restore(irq_state);
 }
@@ -261,10 +261,10 @@ fsm_status_t remove_event(fsm_id_t fsm, fsm_event_t event)
     }
 
     {
-        uint32_t mask = to_events_set(event);
+        fsm_events_t events = to_events_set(event);
         fsm_irq_state_t irq_state = fsm_port_irq_save();
 
-        fsm_table[(uint32_t)fsm].events_set &= ~mask;
+        fsm_table[(uint32_t)fsm].events_set &= ~events.mask;
 
         fsm_port_irq_restore(irq_state);
     }
@@ -301,13 +301,13 @@ static uint64_t next_timer_generation(uint64_t generation)
     return generation + UINT64_C(1);
 }
 
-static fsm_timer_id_t add_timer_internal(fsm_id_t fsm, fsm_duration_t delay, fsm_duration_t period, uint32_t events)
+static fsm_timer_id_t add_timer_internal(fsm_id_t fsm, fsm_duration_t delay, fsm_duration_t period, fsm_events_t events)
 {
     fsm_duration_t elapsed_since_timer_service;
     uint32_t i;
     uint32_t probe;
 
-    if ((valid_fsm(fsm) == UINT32_C(0)) || (delay.ticks == UINT32_C(0)) || (events == FSM_EVENTS_NONE))
+    if ((valid_fsm(fsm) == UINT32_C(0)) || (delay.ticks == UINT32_C(0)) || (fsm_events_is_empty(events) != UINT32_C(0)))
     {
         return FSM_TIMER_INVALID_ID;
     }
@@ -367,12 +367,12 @@ static fsm_timer_id_t add_timer_internal(fsm_id_t fsm, fsm_duration_t delay, fsm
     return FSM_TIMER_INVALID_ID;
 }
 
-fsm_timer_id_t add_timer(fsm_id_t fsm, fsm_duration_t delay, uint32_t events)
+fsm_timer_id_t add_timer(fsm_id_t fsm, fsm_duration_t delay, fsm_events_t events)
 {
     return add_timer_internal(fsm, delay, (fsm_duration_t){ .ticks = UINT32_C(0) }, events);
 }
 
-fsm_timer_id_t add_periodical_timer(fsm_id_t fsm, fsm_duration_t period, uint32_t events)
+fsm_timer_id_t add_periodical_timer(fsm_id_t fsm, fsm_duration_t period, fsm_events_t events)
 {
     return add_timer_internal(fsm, period, period, events);
 }
@@ -381,7 +381,7 @@ static inline void clear_timer_slot(uint32_t slot)
 {
     fsm_time_table[slot].delta.ticks = UINT32_C(0);
     fsm_time_table[slot].period.ticks = UINT32_C(0);
-    fsm_time_table[slot].events = UINT32_C(0);
+    fsm_time_table[slot].events = FSM_EVENTS_NONE;
     fsm_time_table[slot].fsm = FSM_INVALID_ID;
 
 #if (FSM_PROFILE_ENABLE != 0)
@@ -430,10 +430,10 @@ void remove_timers(fsm_id_t fsm)
     }
 }
 
-static inline uint32_t take_fsm_events(uint32_t fsm)
+static inline fsm_events_t take_fsm_events(uint32_t fsm)
 {
     fsm_irq_state_t irq_state = fsm_port_irq_save();
-    uint32_t events = fsm_table[fsm].events_set;
+    fsm_events_t events = { .mask = fsm_table[fsm].events_set };
 
     fsm_table[fsm].events_set = UINT32_C(0);
     fsm_port_irq_restore(irq_state);
@@ -469,7 +469,7 @@ void main_fsm(void)
                     if (elapsed.ticks >= fsm_time_table[i].delta.ticks)
                     {
                         fsm_id_t fsm = fsm_time_table[i].fsm;
-                        uint32_t events = fsm_time_table[i].events;
+                        fsm_events_t events = fsm_time_table[i].events;
 
                         if (fsm_time_table[i].period.ticks != UINT32_C(0))
                         {
@@ -523,17 +523,17 @@ void main_fsm(void)
         for (i = UINT32_C(0); i < (uint32_t)FSM_LAST; ++i)
         {
 #if (FSM_PORT_EVENT_POLL_REQUIRES_IRQ_LOCK != 0)
-            uint32_t events = take_fsm_events(i);
+            fsm_events_t events = take_fsm_events(i);
 #else
-            uint32_t events = fsm_table[i].events_set;
-            if (events != UINT32_C(0))
+            fsm_events_t events = { .mask = fsm_table[i].events_set };
+            if (events.mask != UINT32_C(0))
             {
                 /* The second check closes the IRQ race after the speculative outer read. */
                 events = take_fsm_events(i);
             }
 #endif
 
-            if (events != UINT32_C(0))
+            if (events.mask != UINT32_C(0))
             {
                 uint32_t state;
 

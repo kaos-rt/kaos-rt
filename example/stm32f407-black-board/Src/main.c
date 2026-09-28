@@ -3,9 +3,9 @@
 #include "board.h"
 
 
-static uint32_t controller_fsm(uint32_t state, uint32_t events)
+static uint32_t controller_fsm(uint32_t state, fsm_events_t events)
 {
-    if (have_event(events, Sys_GeneralEvent) != FSM_EVENTS_NONE)
+    if (have_event(events, Sys_GeneralEvent) != UINT32_C(0))
     {
         if (key0_pressed() != UINT32_C(0))
         {

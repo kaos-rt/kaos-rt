@@ -26,8 +26,14 @@ typedef struct
     uint32_t ticks;
 } fsm_duration_t;
 
+typedef struct
+{
+    uint32_t mask;
+} fsm_events_t;
+
 _Static_assert(sizeof(fsm_time_t) == sizeof(uint32_t), "fsm_time_t must remain 32-bit");
 _Static_assert(sizeof(fsm_duration_t) == sizeof(uint32_t), "fsm_duration_t must remain 32-bit");
+_Static_assert(sizeof(fsm_events_t) == sizeof(uint32_t), "fsm_events_t must remain 32-bit");
 
 #include "fsm_instance.h"
 #include "fsm_port.h"
@@ -37,7 +43,7 @@ _Static_assert(sizeof(fsm_duration_t) == sizeof(uint32_t), "fsm_duration_t must 
 #endif
 
 typedef uint64_t fsm_timer_id_t;
-typedef uint32_t (*fsm_t)(uint32_t state, uint32_t events);
+typedef uint32_t (*fsm_t)(uint32_t state, fsm_events_t events);
 
 /* Public operation status values: success is always zero. */
 typedef enum
@@ -49,7 +55,7 @@ typedef enum
 } fsm_status_t;
 
 /* Event bitmap sentinel and the invalid FSM identifier. */
-#define FSM_EVENTS_NONE      UINT32_C(0)
+#define FSM_EVENTS_NONE      ((fsm_events_t){ .mask = UINT32_C(0) })
 #define FSM_INVALID_ID       FSM_LAST
 
 #if (FSM_PROFILE_ENABLE != 0)
@@ -123,22 +129,32 @@ _Static_assert(FSM_EVENT_COUNT <= UINT32_C(32),
                "FSM_EVENT_COUNT exceeds event bitmap capacity");
 
 /* Event and logical-time helpers. */
-static inline uint32_t to_events_set(fsm_event_t event)
+static inline fsm_events_t to_events_set(fsm_event_t event)
 {
     uint32_t event_index = (uint32_t)event;
-    uint32_t mask = UINT32_C(0);
+    fsm_events_t events = FSM_EVENTS_NONE;
 
     if (event_index < (uint32_t)FSM_EVENT_COUNT)
     {
-        mask = UINT32_C(1) << event_index;
+        events.mask = UINT32_C(1) << event_index;
     }
 
-    return mask;
+    return events;
 }
 
-static inline uint32_t have_event(uint32_t events, fsm_event_t event)
+static inline fsm_events_t fsm_events_union(fsm_events_t left, fsm_events_t right)
 {
-    return events & to_events_set(event);
+    return (fsm_events_t){ .mask = left.mask | right.mask };
+}
+
+static inline uint32_t fsm_events_is_empty(fsm_events_t events)
+{
+    return (uint32_t)(events.mask == UINT32_C(0));
+}
+
+static inline uint32_t have_event(fsm_events_t events, fsm_event_t event)
+{
+    return events.mask & to_events_set(event).mask;
 }
 
 static inline fsm_duration_t fsm_duration_from_units(uint32_t value, uint32_t units_per_second)
@@ -233,8 +249,8 @@ fsm_status_t remove_event(fsm_id_t fsm, fsm_event_t event);
 fsm_status_t remove_events(fsm_id_t fsm);
 
 /* Timer API. The target FSM precedes the duration and event mask. */
-fsm_timer_id_t add_timer(fsm_id_t fsm, fsm_duration_t delay, uint32_t events);
-fsm_timer_id_t add_periodical_timer(fsm_id_t fsm, fsm_duration_t period, uint32_t events);
+fsm_timer_id_t add_timer(fsm_id_t fsm, fsm_duration_t delay, fsm_events_t events);
+fsm_timer_id_t add_periodical_timer(fsm_id_t fsm, fsm_duration_t period, fsm_events_t events);
 fsm_timer_result_t remove_timer(fsm_timer_id_t timer_id);
 void remove_timers(fsm_id_t fsm);
 
