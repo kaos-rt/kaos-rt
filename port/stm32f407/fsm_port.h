@@ -23,7 +23,6 @@
 #endif
 
 /* Core-visible port types. */
-typedef uint32_t fsm_time_t;
 typedef uint32_t fsm_irq_state_t;
 typedef uint32_t fsm_profile_tick_t;
 
@@ -83,7 +82,7 @@ static inline void fsm_port_time_init(void)
 
 static inline fsm_time_t fsm_port_time_now(void)
 {
-    return TIM2->CNT;
+    return (fsm_time_t){ .ticks = TIM2->CNT };
 }
 
 /* DWT CYCCNT measures core-clock cycles and is used only by diagnostics. */

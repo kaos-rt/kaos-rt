@@ -14,6 +14,21 @@
 #include <stdint.h>
 
 #include "fsm_config.h"
+
+/* Logical timestamps and durations are intentionally incompatible types. */
+typedef struct
+{
+    uint32_t ticks;
+} fsm_time_t;
+
+typedef struct
+{
+    uint32_t ticks;
+} fsm_duration_t;
+
+_Static_assert(sizeof(fsm_time_t) == sizeof(uint32_t), "fsm_time_t must remain 32-bit");
+_Static_assert(sizeof(fsm_duration_t) == sizeof(uint32_t), "fsm_duration_t must remain 32-bit");
+
 #include "fsm_instance.h"
 #include "fsm_port.h"
 
@@ -126,18 +141,18 @@ static inline uint32_t have_event(uint32_t events, fsm_event_t event)
     return events & to_events_set(event);
 }
 
-static inline fsm_time_t fsm_time_from_units(uint32_t value, uint32_t units_per_second)
+static inline fsm_duration_t fsm_duration_from_units(uint32_t value, uint32_t units_per_second)
 {
     /*
     * uint64_t is used only for intermediate arithmetic.
-    * Runtime time representation remains fsm_time_t(uint32_t).
+    * Runtime duration representation remains uint32_t logical ticks.
     */
     uint64_t product;
     uint64_t ticks;
 
     if ((value == UINT32_C(0)) || (units_per_second == UINT32_C(0)))
     {
-        return UINT32_C(0);
+        return (fsm_duration_t){ .ticks = UINT32_C(0) };
     }
 
     product = (uint64_t)value * (uint64_t)FSM_TICK_FREQ_HZ;
@@ -150,25 +165,25 @@ static inline fsm_time_t fsm_time_from_units(uint32_t value, uint32_t units_per_
 
     if (ticks > (uint64_t)UINT32_MAX)
     {
-        return UINT32_C(0);
+        return (fsm_duration_t){ .ticks = UINT32_C(0) };
     }
 
-    return (fsm_time_t)ticks;
+    return (fsm_duration_t){ .ticks = (uint32_t)ticks };
 }
 
-static inline fsm_time_t fsm_time_from_us(uint32_t value)
+static inline fsm_duration_t fsm_duration_from_us(uint32_t value)
 {
-    return fsm_time_from_units(value, UINT32_C(1000000));
+    return fsm_duration_from_units(value, UINT32_C(1000000));
 }
 
-static inline fsm_time_t fsm_time_from_ms(uint32_t value)
+static inline fsm_duration_t fsm_duration_from_ms(uint32_t value)
 {
-    return fsm_time_from_units(value, UINT32_C(1000));
+    return fsm_duration_from_units(value, UINT32_C(1000));
 }
 
-static inline fsm_time_t fsm_time_from_s(uint32_t value)
+static inline fsm_duration_t fsm_duration_from_s(uint32_t value)
 {
-    return fsm_time_from_units(value, UINT32_C(1));
+    return fsm_duration_from_units(value, UINT32_C(1));
 }
 
 /* Compact timer-handle helpers. */
@@ -217,9 +232,9 @@ fsm_status_t append_event(fsm_id_t fsm, fsm_event_t event);
 fsm_status_t remove_event(fsm_id_t fsm, fsm_event_t event);
 fsm_status_t remove_events(fsm_id_t fsm);
 
-/* Timer API. Delay and period are logical ticks. */
-fsm_timer_id_t add_timer(fsm_id_t fsm, fsm_time_t delay, uint32_t events);
-fsm_timer_id_t add_periodical_timer(fsm_id_t fsm, fsm_time_t period, uint32_t events);
+/* Timer API. The target FSM precedes the duration and event mask. */
+fsm_timer_id_t add_timer(fsm_id_t fsm, fsm_duration_t delay, uint32_t events);
+fsm_timer_id_t add_periodical_timer(fsm_id_t fsm, fsm_duration_t period, uint32_t events);
 fsm_timer_result_t remove_timer(fsm_timer_id_t timer_id);
 void remove_timers(fsm_id_t fsm);
 

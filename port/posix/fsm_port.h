@@ -25,7 +25,6 @@
 #define FSM_PORT_WEAK
 #endif
 
-typedef uint32_t fsm_time_t;
 typedef uint32_t fsm_irq_state_t;
 typedef uint32_t fsm_profile_tick_t;
 

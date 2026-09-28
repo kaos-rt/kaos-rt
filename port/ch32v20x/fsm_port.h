@@ -22,7 +22,6 @@
 #error "Define FSM_SYSTICK_CLOCK_HZ in the board build configuration as the active SysTick clock in Hz"
 #endif
 
-typedef uint32_t fsm_time_t;
 typedef uint32_t fsm_irq_state_t;
 typedef uint64_t fsm_profile_tick_t;
 
@@ -86,7 +85,7 @@ static inline void fsm_port_time_init(void)
 
 static inline fsm_time_t fsm_port_time_now(void)
 {
-    return (fsm_time_t)(fsm_port_systick_now() / (uint64_t)(FSM_SYSTICK_CLOCK_HZ / FSM_TICK_FREQ_HZ));
+    return (fsm_time_t){ .ticks = (uint32_t)(fsm_port_systick_now() / (uint64_t)(FSM_SYSTICK_CLOCK_HZ / FSM_TICK_FREQ_HZ)) };
 }
 
 static inline uint64_t port_uptime_usec(void)

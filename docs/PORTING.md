@@ -11,12 +11,16 @@
 
 Заголовок порта определяет:
 
-- `fsm_time_t`, `fsm_irq_state_t` и `fsm_profile_tick_t`;
+- `fsm_irq_state_t` и `fsm_profile_tick_t`;
 - `fsm_port_time_init()` и `fsm_port_time_now()`;
 - `fsm_port_irq_save()` и `fsm_port_irq_restore()`;
 - `fsm_port_profile_init()` и `fsm_port_profile_now()`;
 - `FSM_PORT_WEAK`;
 - `FSM_PORT_EVENT_POLL_REQUIRES_IRQ_LOCK`.
+
+Типы `fsm_time_t` и `fsm_duration_t` принадлежат ядру и объявляются до
+подключения `fsm_port.h`. Порт возвращает `fsm_time_t`; прикладной код задаёт
+интервалы типом `fsm_duration_t`.
 
 ## Время
 

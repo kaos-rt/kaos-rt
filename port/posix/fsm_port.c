@@ -13,9 +13,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "fsm_config.h"
-#include "fsm_instance.h"
-#include "fsm_port.h"
+#include "fsm.h"
 
 #ifndef FSM_INSTANCE_CLOCK_INITIAL_OFFSET_US
 #define FSM_INSTANCE_CLOCK_INITIAL_OFFSET_US  0
@@ -138,7 +136,7 @@ static fsm_time_t fsm_posix_local_time_ticks(void)
     ticks = ((uint64_t)seconds * (uint64_t)FSM_TICK_FREQ_HZ) +
             (((uint64_t)nanoseconds * (uint64_t)FSM_TICK_FREQ_HZ) / UINT64_C(1000000000));
 
-    return (fsm_time_t)ticks;
+    return (fsm_time_t){ .ticks = (uint32_t)ticks };
 }
 
 static uint64_t fsm_posix_uptime_usec(int64_t uptime_ns)

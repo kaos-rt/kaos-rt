@@ -27,7 +27,7 @@ int main(void)
 
     start_fsm();
     (void)set_fsm(FSM_Controller, controller_fsm);
-    (void)add_periodical_timer(FSM_Controller, fsm_time_from_ms(UINT32_C(100)), to_events_set(Sys_GeneralEvent));
+    (void)add_periodical_timer(FSM_Controller, fsm_duration_from_ms(UINT32_C(100)), to_events_set(Sys_GeneralEvent));
 
     main_fsm();
 }

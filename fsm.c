@@ -23,8 +23,8 @@ typedef struct
 typedef struct
 {
     /* A zero delta denotes a free timer slot; active timers always have delta > 0. */
-    fsm_time_t delta;
-    fsm_time_t period;
+    fsm_duration_t delta;
+    fsm_duration_t period;
     uint32_t events;
     fsm_id_t fsm;
     uint64_t generation;
@@ -71,8 +71,8 @@ void start_fsm(void)
 
     for (i = UINT32_C(0); i < (uint32_t)FSM_TIMER_COUNT; ++i)
     {
-        fsm_time_table[i].delta = UINT32_C(0);
-        fsm_time_table[i].period = UINT32_C(0);
+        fsm_time_table[i].delta.ticks = UINT32_C(0);
+        fsm_time_table[i].period.ticks = UINT32_C(0);
         fsm_time_table[i].events = UINT32_C(0);
         fsm_time_table[i].fsm = FSM_INVALID_ID;
         fsm_time_table[i].generation = UINT64_C(0);
@@ -102,11 +102,11 @@ void start_fsm(void)
 #endif
 }
 
-static fsm_time_t elapsed_time(void)
+static fsm_duration_t elapsed_time(void)
 {
     /* Unsigned subtraction preserves elapsed time across one counter wrap. */
     fsm_time_t now = fsm_port_time_now();
-    fsm_time_t elapsed = now - fsm_last_time;
+    fsm_duration_t elapsed = { .ticks = now.ticks - fsm_last_time.ticks };
 
     fsm_last_time = now;
 
@@ -301,21 +301,21 @@ static uint64_t next_timer_generation(uint64_t generation)
     return generation + UINT64_C(1);
 }
 
-static fsm_timer_id_t add_timer_internal(fsm_id_t fsm, fsm_time_t delay, fsm_time_t period, uint32_t events)
+static fsm_timer_id_t add_timer_internal(fsm_id_t fsm, fsm_duration_t delay, fsm_duration_t period, uint32_t events)
 {
-    fsm_time_t elapsed_since_timer_service;
+    fsm_duration_t elapsed_since_timer_service;
     uint32_t i;
     uint32_t probe;
 
-    if ((valid_fsm(fsm) == UINT32_C(0)) || (delay == UINT32_C(0)) || (events == FSM_EVENTS_NONE))
+    if ((valid_fsm(fsm) == UINT32_C(0)) || (delay.ticks == UINT32_C(0)) || (events == FSM_EVENTS_NONE))
     {
         return FSM_TIMER_INVALID_ID;
     }
 
     /* A timer starts at this call, not at the preceding timer-service phase. */
-    elapsed_since_timer_service = fsm_port_time_now() - fsm_last_time;
+    elapsed_since_timer_service.ticks = fsm_port_time_now().ticks - fsm_last_time.ticks;
 
-    if (delay > (UINT32_MAX - elapsed_since_timer_service))
+    if (delay.ticks > (UINT32_MAX - elapsed_since_timer_service.ticks))
     {
         return FSM_TIMER_INVALID_ID;
     }
@@ -330,11 +330,11 @@ static fsm_timer_id_t add_timer_internal(fsm_id_t fsm, fsm_time_t delay, fsm_tim
             i -= (uint32_t)FSM_TIMER_COUNT;
         }
 
-        if (fsm_time_table[i].delta == UINT32_C(0))
+        if (fsm_time_table[i].delta.ticks == UINT32_C(0))
         {
             uint64_t generation = next_timer_generation(fsm_time_table[i].generation);
 
-            fsm_time_table[i].delta = delay + elapsed_since_timer_service;
+            fsm_time_table[i].delta.ticks = delay.ticks + elapsed_since_timer_service.ticks;
             fsm_time_table[i].period = period;
             fsm_time_table[i].events = events;
             fsm_time_table[i].fsm = fsm;
@@ -367,20 +367,20 @@ static fsm_timer_id_t add_timer_internal(fsm_id_t fsm, fsm_time_t delay, fsm_tim
     return FSM_TIMER_INVALID_ID;
 }
 
-fsm_timer_id_t add_timer(fsm_id_t fsm, fsm_time_t delay, uint32_t events)
+fsm_timer_id_t add_timer(fsm_id_t fsm, fsm_duration_t delay, uint32_t events)
 {
-    return add_timer_internal(fsm, delay, UINT32_C(0), events);
+    return add_timer_internal(fsm, delay, (fsm_duration_t){ .ticks = UINT32_C(0) }, events);
 }
 
-fsm_timer_id_t add_periodical_timer(fsm_id_t fsm, fsm_time_t period, uint32_t events)
+fsm_timer_id_t add_periodical_timer(fsm_id_t fsm, fsm_duration_t period, uint32_t events)
 {
     return add_timer_internal(fsm, period, period, events);
 }
 
 static inline void clear_timer_slot(uint32_t slot)
 {
-    fsm_time_table[slot].delta = UINT32_C(0);
-    fsm_time_table[slot].period = UINT32_C(0);
+    fsm_time_table[slot].delta.ticks = UINT32_C(0);
+    fsm_time_table[slot].period.ticks = UINT32_C(0);
     fsm_time_table[slot].events = UINT32_C(0);
     fsm_time_table[slot].fsm = FSM_INVALID_ID;
 
@@ -402,7 +402,7 @@ fsm_timer_result_t remove_timer(fsm_timer_id_t timer_id)
     slot = fsm_timer_get_slot(timer_id);
     generation = fsm_timer_get_generation(timer_id);
 
-    if ((fsm_time_table[slot].delta != UINT32_C(0)) && (fsm_time_table[slot].generation == generation))
+    if ((fsm_time_table[slot].delta.ticks != UINT32_C(0)) && (fsm_time_table[slot].generation == generation))
     {
         clear_timer_slot(slot);
 
@@ -423,7 +423,7 @@ void remove_timers(fsm_id_t fsm)
 
     for (i = UINT32_C(0); i < (uint32_t)FSM_TIMER_COUNT; ++i)
     {
-        if ((fsm_time_table[i].delta != UINT32_C(0)) && (fsm_time_table[i].fsm == fsm))
+        if ((fsm_time_table[i].delta.ticks != UINT32_C(0)) && (fsm_time_table[i].fsm == fsm))
         {
             clear_timer_slot(i);
         }
@@ -458,36 +458,36 @@ void main_fsm(void)
         fsm_profile_tick_t timer_service_start = fsm_port_profile_now();
 #endif
 
-        fsm_time_t elapsed = elapsed_time();
+        fsm_duration_t elapsed = elapsed_time();
 
-        if (elapsed != UINT32_C(0))
+        if (elapsed.ticks != UINT32_C(0))
         {
             for (i = UINT32_C(0); i < (uint32_t)FSM_TIMER_COUNT; ++i)
             {
-                if (fsm_time_table[i].delta != UINT32_C(0))
+                if (fsm_time_table[i].delta.ticks != UINT32_C(0))
                 {
-                    if (elapsed >= fsm_time_table[i].delta)
+                    if (elapsed.ticks >= fsm_time_table[i].delta.ticks)
                     {
                         fsm_id_t fsm = fsm_time_table[i].fsm;
                         uint32_t events = fsm_time_table[i].events;
 
-                        if (fsm_time_table[i].period != UINT32_C(0))
+                        if (fsm_time_table[i].period.ticks != UINT32_C(0))
                         {
                             /* Preserve periodic phase; missed expiries intentionally coalesce. */
-                            fsm_time_t overshoot = elapsed - fsm_time_table[i].delta;
-                            fsm_time_t phase = overshoot % fsm_time_table[i].period;
+                            fsm_duration_t overshoot = { .ticks = elapsed.ticks - fsm_time_table[i].delta.ticks };
+                            fsm_duration_t phase = { .ticks = overshoot.ticks % fsm_time_table[i].period.ticks };
 
 #if (FSM_PROFILE_ENABLE != 0)
-                            fsm_profile_system.timer_missed_periods += overshoot / fsm_time_table[i].period;
+                            fsm_profile_system.timer_missed_periods += overshoot.ticks / fsm_time_table[i].period.ticks;
 #endif
 
-                            if (phase == UINT32_C(0))
+                            if (phase.ticks == UINT32_C(0))
                             {
                                 fsm_time_table[i].delta = fsm_time_table[i].period;
                             }
                             else
                             {
-                                fsm_time_table[i].delta = fsm_time_table[i].period - phase;
+                                fsm_time_table[i].delta.ticks = fsm_time_table[i].period.ticks - phase.ticks;
                             }
                         }
                         else
@@ -503,7 +503,7 @@ void main_fsm(void)
                     }
                     else
                     {
-                        fsm_time_table[i].delta -= elapsed;
+                        fsm_time_table[i].delta.ticks -= elapsed.ticks;
                     }
                 }
             }
@@ -602,7 +602,7 @@ void fsm_test_run_once(void)
 void fsm_test_force_timer_generation(uint32_t slot, uint64_t generation)
 {
     if ((slot < (uint32_t)FSM_TIMER_COUNT) &&
-        (fsm_time_table[slot].delta == UINT32_C(0)))
+        (fsm_time_table[slot].delta.ticks == UINT32_C(0)))
     {
         fsm_time_table[slot].generation = generation;
     }

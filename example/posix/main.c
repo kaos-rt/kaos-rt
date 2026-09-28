@@ -92,8 +92,8 @@ int main(void)
     (void)append_event(FSM_CONTROLLER, FSM_CONTROLLER_WAKEUP);
 
     /* KAOS-SRS-005: используются периодический и одноразовый таймеры. */
-    periodic_timer = add_periodical_timer(FSM_CONTROLLER, fsm_time_from_ms(UINT32_C(100)), to_events_set(FSM_CONTROLLER_STEP));
-    one_shot_timer = add_timer(FSM_ONE_SHOT, fsm_time_from_ms(UINT32_C(250)), to_events_set(FSM_ONE_SHOT_EXPIRED));
+    periodic_timer = add_periodical_timer(FSM_CONTROLLER, fsm_duration_from_ms(UINT32_C(100)), to_events_set(FSM_CONTROLLER_STEP));
+    one_shot_timer = add_timer(FSM_ONE_SHOT, fsm_duration_from_ms(UINT32_C(250)), to_events_set(FSM_ONE_SHOT_EXPIRED));
 
     if ((periodic_timer == FSM_TIMER_INVALID_ID) || (one_shot_timer == FSM_TIMER_INVALID_ID))
     {
