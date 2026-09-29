@@ -290,6 +290,26 @@ fsm_status_t remove_events(fsm_id_t fsm)
 }
 
 /* Timer allocation and lifetime. */
+static inline fsm_timer_id_t fsm_timer_make_id(uint32_t slot, uint32_t generation)
+{
+    if ((slot >= (uint32_t)FSM_TIMER_COUNT) || (generation == UINT32_C(0)))
+    {
+        return FSM_TIMER_INVALID_ID;
+    }
+
+    return (fsm_timer_id_t){ .slot = slot, .generation = generation };
+}
+
+static inline uint32_t fsm_timer_get_slot(fsm_timer_id_t id)
+{
+    return id.slot;
+}
+
+static inline uint32_t fsm_timer_get_generation(fsm_timer_id_t id)
+{
+    return id.generation;
+}
+
 /*
  * A generation wraps after 2^32 reuses of one slot: about 136 years at
  * 1 reuse/s, 497 days at 100 reuses/s, or 50 days at 1000 reuses/s.

@@ -212,27 +212,7 @@ static inline fsm_duration_t fsm_time_elapsed(fsm_time_t since, fsm_time_t now)
     return (fsm_duration_t){ .ticks = now.ticks - since.ticks };
 }
 
-/* Timer-handle helpers. */
-static inline fsm_timer_id_t fsm_timer_make_id(uint32_t slot, uint32_t generation)
-{
-    if ((slot >= (uint32_t)FSM_TIMER_COUNT) || (generation == UINT32_C(0)))
-    {
-        return FSM_TIMER_INVALID_ID;
-    }
-
-    return (fsm_timer_id_t){ .slot = slot, .generation = generation };
-}
-
-static inline uint32_t fsm_timer_get_slot(fsm_timer_id_t id)
-{
-    return id.slot;
-}
-
-static inline uint32_t fsm_timer_get_generation(fsm_timer_id_t id)
-{
-    return id.generation;
-}
-
+/* Timer-handle validity is the only public handle inspection operation. */
 static inline uint32_t fsm_timer_is_valid(fsm_timer_id_t id)
 {
     return (uint32_t)((id.slot < (uint32_t)FSM_TIMER_COUNT) && (id.generation != UINT32_C(0)));
