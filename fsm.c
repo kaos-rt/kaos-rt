@@ -490,14 +490,7 @@ void main_fsm(void)
                             fsm_profile_system.timer_missed_periods += overshoot.ticks / fsm_time_table[i].period.ticks;
 #endif
 
-                            if (phase.ticks == UINT32_C(0))
-                            {
-                                fsm_time_table[i].delta = fsm_time_table[i].period;
-                            }
-                            else
-                            {
-                                fsm_time_table[i].delta.ticks = fsm_time_table[i].period.ticks - phase.ticks;
-                            }
+                            fsm_time_table[i].delta.ticks = fsm_time_table[i].period.ticks - phase.ticks;
                         }
                         else
                         {
