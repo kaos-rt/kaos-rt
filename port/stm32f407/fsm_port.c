@@ -1,6 +1,6 @@
 /* KAOS-RT: 64-bit uptime extension for the STM32F407 TIM2 time source. */
 
-#include "fsm_port.h"
+#include "fsm.h"
 
 static volatile uint32_t fsm_port_tim2_overflow_count;
 

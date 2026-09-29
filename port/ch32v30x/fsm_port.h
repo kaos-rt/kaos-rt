@@ -110,7 +110,7 @@ static inline fsm_irq_state_t fsm_port_irq_save(void)
         "csrr %0, mstatus \n"
         "csrc 0x800, %1 \n"
         "fence.i \n"
-        : "=r" (state)
+        : "=&r" (state)
         : "r" (FSM_PORT_IRQ_ENABLE_MASK)
         : "memory");
 
