@@ -310,8 +310,13 @@ static fsm_timer_id_t add_timer_internal(fsm_id_t fsm, fsm_duration_t delay, fsm
     uint32_t i;
     uint32_t probe;
 
-    if ((valid_fsm(fsm) == UINT32_C(0)) || (delay.ticks == UINT32_C(0)) 
+    if ((valid_fsm(fsm) == UINT32_C(0)) || (delay.ticks == UINT32_C(0))
         || (fsm_events_is_empty(events) != UINT32_C(0)) || (fsm_events_are_valid(events) == UINT32_C(0)))
+    {
+        return FSM_TIMER_INVALID_ID;
+    }
+
+    if (fsm_table[(uint32_t)fsm].callback == null_fsm)
     {
         return FSM_TIMER_INVALID_ID;
     }
