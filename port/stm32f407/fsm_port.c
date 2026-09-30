@@ -9,7 +9,7 @@ static volatile uint32_t fsm_port_tim2_overflow_count;
 static volatile uint32_t fsm_port_logical_epoch;
 static volatile uint32_t fsm_port_logical_remainder;
 
-static void fsm_port_advance_logical_epoch(uint32_t * const epoch, uint32_t * const remainder)
+static void fsm_port_advance_logical_epoch(uint32_t epoch[static const 1], uint32_t remainder[static const 1])
 {
     /* Preserve the fractional logical tick accumulated over one 32-bit cycle. */
     *epoch += FSM_PORT_COUNTER_CYCLE_TICKS;

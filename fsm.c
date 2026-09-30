@@ -309,7 +309,7 @@ static inline uint32_t fsm_timer_get_slot(fsm_timer_id_t id)
     return id.slot;
 }
 
-static inline uint32_t fsm_timer_generation_matches(const fsm_timer_t *timer, fsm_timer_id_t id)
+static inline uint32_t fsm_timer_generation_matches(const fsm_timer_t timer[static 1], fsm_timer_id_t id)
 {
     return (uint32_t)((timer->generation_low == id.generation_low)
                       && (timer->generation_high == id.generation_high));
@@ -319,7 +319,7 @@ static inline uint32_t fsm_timer_generation_matches(const fsm_timer_t *timer, fs
  * A generation never wraps. After 2^48 - 1 uses the slot is permanently
  * retired, so an obsolete timer ID can never identify a later timer.
  */
-static uint32_t next_timer_generation(const fsm_timer_t *timer, uint32_t *generation_low, uint16_t *generation_high)
+static uint32_t next_timer_generation(const fsm_timer_t timer[static 1], uint32_t generation_low[static 1], uint16_t generation_high[static 1])
 {
     *generation_low = timer->generation_low;
     *generation_high = timer->generation_high;
