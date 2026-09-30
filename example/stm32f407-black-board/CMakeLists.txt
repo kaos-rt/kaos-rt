@@ -51,7 +51,8 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 target_compile_definitions(${PROJECT_NAME} PRIVATE
   # Add additional defined symbols here
   # SystemInit() in Src/main.c leaves the STM32F407 on HSI = 16 MHz.
-  # Update this value together with the clock tree when integrating KAOS-RT.
+  # TIM2 APB1 timer clock in the example.
+  # Update it together with the clock tree when integrating KAOS-RT.
   FSM_TIMER_CLOCK_HZ=16000000
 )
 

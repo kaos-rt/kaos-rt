@@ -1,7 +1,7 @@
 /*
  * KAOS-RT: порт для STM32F407.
  *
- * Источник логических тиков: 32-битный TIM2.
+ * Общий источник логических тиков и uptime: 32-битный TIM2 с частотой 1 МГц.
  * Критическая секция: Cortex-M PRIMASK.
  * Платформенные зависимости: stm32f407_min.h и GCC-совместимый inline assembly.
  */
@@ -15,11 +15,10 @@
 #include "fsm_config.h"
 
 /*
- * The application board configuration owns the clock tree. Define this macro
- * in its build settings before including fsm.h; do not add a port default.
+ * The board configuration owns the TIM2 clock tree; do not add a port default.
  */
 #ifndef FSM_TIMER_CLOCK_HZ
-#error "Define FSM_TIMER_CLOCK_HZ in the board build configuration as the actual TIM2 input clock in Hz"
+#error "Define FSM_TIMER_CLOCK_HZ as the actual APB1 timer clock for TIM2"
 #endif
 
 /* Core-visible port types. */
@@ -36,6 +35,8 @@ typedef uint32_t fsm_profile_tick_t;
 #define FSM_PORT_TIM_SR_UIF       UINT32_C(1)
 #define FSM_PORT_NVIC_ISER0       (*(volatile uint32_t *)UINT32_C(0xE000E100))
 #define FSM_PORT_TIM2_IRQ_MASK    (UINT32_C(1) << 28)
+#define FSM_PORT_TIME_SOURCE_HZ   UINT32_C(1000000)
+#define FSM_PORT_USEC_PER_LOGICAL_TICK (FSM_PORT_TIME_SOURCE_HZ / FSM_TICK_FREQ_HZ)
 
 /* GNU-compatible compiler extension; record as a MISRA language deviation. */
 #define FSM_PORT_WEAK __attribute__((weak))
@@ -45,45 +46,34 @@ typedef uint32_t fsm_profile_tick_t;
 
 /* TIM2 uses a 16-bit prescaler and remains a free-running 32-bit counter. */
 _Static_assert(
-    (FSM_TIMER_CLOCK_HZ % FSM_TICK_FREQ_HZ) == UINT32_C(0),
-    "TIM2 clock must be an integer multiple of FSM_TICK_FREQ_HZ");
+    (FSM_TIMER_CLOCK_HZ % FSM_PORT_TIME_SOURCE_HZ) == UINT32_C(0),
+    "TIM2 clock must be an integer multiple of 1 MHz");
 
 _Static_assert(
-    (FSM_TIMER_CLOCK_HZ / FSM_TICK_FREQ_HZ) >= UINT32_C(1),
-    "FSM_TICK_FREQ_HZ is too high for TIM2 clock");
+    (FSM_TIMER_CLOCK_HZ / FSM_PORT_TIME_SOURCE_HZ) >= UINT32_C(1),
+    "TIM2 clock is lower than 1 MHz");
 
 _Static_assert(
-    (FSM_TIMER_CLOCK_HZ / FSM_TICK_FREQ_HZ) <= UINT32_C(65536),
+    (FSM_TIMER_CLOCK_HZ / FSM_PORT_TIME_SOURCE_HZ) <= UINT32_C(65536),
     "TIM2 prescaler does not fit into 16 bits");
 
 _Static_assert(
-    (UINT32_C(1000000) % FSM_TICK_FREQ_HZ) == UINT32_C(0),
-    "FSM_TICK_FREQ_HZ must be an integer divisor of 1 MHz for port_uptime_usec");
+    (FSM_PORT_TIME_SOURCE_HZ % FSM_TICK_FREQ_HZ) == UINT32_C(0),
+    "1 MHz time source must be an integer multiple of FSM_TICK_FREQ_HZ");
 
-#define PORT_UPTIME_USEC_PER_TICK  (UINT32_C(1000000) / FSM_TICK_FREQ_HZ)
+_Static_assert(
+    FSM_TICK_FREQ_HZ <= FSM_PORT_TIME_SOURCE_HZ,
+    "FSM_TICK_FREQ_HZ must not exceed 1 MHz");
 
 void port_uptime_init(void);
 uint64_t port_uptime_usec(void);
 
 static inline void fsm_port_time_init(void)
 {
-    RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
-
-    /* UG transfers the buffered prescaler before the first time measurement. */
-    TIM2->PSC = (FSM_TIMER_CLOCK_HZ / FSM_TICK_FREQ_HZ) - UINT32_C(1);
-    TIM2->ARR = UINT32_MAX;
-    TIM2->EGR = TIM_EGR_UG;
-    TIM2->CNT = UINT32_C(0);
-
     port_uptime_init();
-
-    TIM2->CR1 |= TIM_CR1_CEN;
 }
 
-static inline fsm_time_t fsm_port_time_now(void)
-{
-    return (fsm_time_t){ .ticks = TIM2->CNT };
-}
+fsm_time_t fsm_port_time_now(void);
 
 /* DWT CYCCNT measures core-clock cycles and is used only by diagnostics. */
 static inline void fsm_port_profile_init(void)
