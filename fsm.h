@@ -33,14 +33,15 @@ typedef struct
 
 typedef struct
 {
-    uint32_t slot;
-    uint32_t generation;
+    uint32_t generation_low;
+    uint16_t generation_high;
+    uint16_t slot;
 } fsm_timer_id_t;
 
 _Static_assert(sizeof(fsm_time_t) == sizeof(uint32_t), "fsm_time_t must remain 32-bit");
 _Static_assert(sizeof(fsm_duration_t) == sizeof(uint32_t), "fsm_duration_t must remain 32-bit");
 _Static_assert(sizeof(fsm_events_t) == sizeof(uint32_t), "fsm_events_t must remain 32-bit");
-_Static_assert(sizeof(fsm_timer_id_t) == (sizeof(uint32_t) * 2U), "fsm_timer_id_t must remain two 32-bit words");
+_Static_assert(sizeof(fsm_timer_id_t) == (sizeof(uint32_t) * 2U), "fsm_timer_id_t must remain 8 bytes");
 
 #include "fsm_instance.h"
 #include "fsm_port.h"
@@ -91,8 +92,8 @@ typedef struct
 } fsm_profile_system_t;
 #endif
 
-/* A timer ID contains its slot and a non-zero reuse generation. */
-#define FSM_TIMER_INVALID_ID      ((fsm_timer_id_t){ .slot = UINT32_C(0), .generation = UINT32_C(0) })
+/* A timer ID contains its slot and a non-zero 48-bit reuse generation. */
+#define FSM_TIMER_INVALID_ID      ((fsm_timer_id_t){0})
 
 typedef enum
 {
@@ -158,7 +159,7 @@ static inline uint32_t fsm_events_are_valid(fsm_events_t events)
 
 static inline uint32_t have_event(fsm_events_t events, fsm_event_t event)
 {
-    return events.mask & to_events_set(event).mask;
+    return (uint32_t)((events.mask & to_events_set(event).mask) != UINT32_C(0));
 }
 
 static inline fsm_duration_t fsm_duration_from_units(uint32_t value, uint32_t units_per_second)
@@ -215,7 +216,8 @@ static inline fsm_duration_t fsm_time_elapsed(fsm_time_t since, fsm_time_t now)
 /* Timer-handle validity is the only public handle inspection operation. */
 static inline uint32_t fsm_timer_is_valid(fsm_timer_id_t id)
 {
-    return (uint32_t)((id.slot < (uint32_t)FSM_TIMER_COUNT) && (id.generation != UINT32_C(0)));
+    return (uint32_t)(((uint32_t)id.slot < (uint32_t)FSM_TIMER_COUNT)
+                      && ((id.generation_low != UINT32_C(0)) || (id.generation_high != UINT16_C(0))));
 }
 
 /* Dispatcher lifecycle. */
@@ -250,9 +252,6 @@ fsm_status_t fsm_profile_get_system(fsm_profile_system_t *profile);
 #if (FSM_TEST_ENABLE != 0)
 /* Test build only: execute one complete main-loop pass and return. */
 void fsm_test_run_once(void);
-
-/* Test build only: prepare a free timer slot for generation-wrap testing. */
-void fsm_test_force_timer_generation(uint32_t slot, uint32_t generation);
 #endif
 
 #endif /* FSM_H_ */

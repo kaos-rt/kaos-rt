@@ -23,11 +23,18 @@ static uint32_t controller_fsm(uint32_t state, fsm_events_t events)
 
 int main(void)
 {
+    fsm_timer_id_t controller_timer;
+
     board_gpio_init();
 
     start_fsm();
     (void)set_fsm(FSM_Controller, controller_fsm);
-    (void)add_periodical_timer(FSM_Controller, fsm_duration_from_ms(UINT32_C(100)), to_events_set(Sys_GeneralEvent));
+    controller_timer = add_periodical_timer(FSM_Controller, fsm_duration_from_ms(UINT32_C(100)), to_events_set(Sys_GeneralEvent));
+
+    if (fsm_timer_is_valid(controller_timer) == UINT32_C(0))
+    {
+        return 1;
+    }
 
     main_fsm();
 }
