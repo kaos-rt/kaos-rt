@@ -15,6 +15,36 @@
 
 #include "fsm_config.h"
 
+/* Advisory compiler contracts; runtime argument checks remain authoritative. */
+#if defined(__clang__)
+#if __has_feature(nullability)
+#define FSM_HAS_NULLABILITY 1
+#else
+#define FSM_HAS_NULLABILITY 0
+#endif
+#else
+#define FSM_HAS_NULLABILITY 0
+#endif
+
+#if FSM_HAS_NULLABILITY
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnullability-extension"
+#pragma clang diagnostic ignored "-Wnullability-completeness"
+#define FSM_NONNULL _Nonnull
+#else
+#define FSM_NONNULL
+#endif
+
+#if defined(__has_attribute)
+#if __has_attribute(access)
+#define FSM_WRITE_ONLY(argument) __attribute__((access(write_only, argument)))
+#else
+#define FSM_WRITE_ONLY(argument)
+#endif
+#else
+#define FSM_WRITE_ONLY(argument)
+#endif
+
 /* Logical timestamps and durations are intentionally incompatible types. */
 typedef struct
 {
@@ -230,7 +260,7 @@ void fsm_loop_service(void);
 /* FSM lifecycle and state diagnosis. */
 fsm_t set_fsm(fsm_id_t fsm, fsm_t callback);
 fsm_t remove_fsm(fsm_id_t fsm);
-fsm_status_t get_fsm_state(fsm_id_t fsm, uint32_t *state);
+fsm_status_t get_fsm_state(fsm_id_t fsm, uint32_t * FSM_NONNULL state) FSM_WRITE_ONLY(2);
 
 /* Event bitmap API; only append_event() is ISR-safe. */
 fsm_status_t append_event(fsm_id_t fsm, fsm_event_t event);
@@ -245,13 +275,21 @@ void remove_timers(fsm_id_t fsm);
 
 #if (FSM_PROFILE_ENABLE != 0)
 /* Snapshot diagnostics; never use these values as release timing acceptance. */
-fsm_status_t fsm_profile_get_fsm(fsm_id_t fsm, fsm_profile_fsm_t *profile);
-fsm_status_t fsm_profile_get_system(fsm_profile_system_t *profile);
+fsm_status_t fsm_profile_get_fsm(fsm_id_t fsm, fsm_profile_fsm_t * FSM_NONNULL profile) FSM_WRITE_ONLY(2);
+fsm_status_t fsm_profile_get_system(fsm_profile_system_t * FSM_NONNULL profile) FSM_WRITE_ONLY(1);
 #endif
 
 #if (FSM_TEST_ENABLE != 0)
 /* Test build only: execute one complete main-loop pass and return. */
 void fsm_test_run_once(void);
 #endif
+
+#if FSM_HAS_NULLABILITY
+#pragma clang diagnostic pop
+#endif
+
+#undef FSM_HAS_NULLABILITY
+#undef FSM_NONNULL
+#undef FSM_WRITE_ONLY
 
 #endif /* FSM_H_ */
