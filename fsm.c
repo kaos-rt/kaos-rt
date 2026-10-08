@@ -69,6 +69,7 @@ FSM_PORT_WEAK void fsm_loop_service(void)
 void start_fsm(void)
 {
     uint32_t i;
+    fsm_irq_state_t irq_state;
 
     /* Clear timers, but retain their reuse generations across restarts. */
     for (i = UINT32_C(0); i < (uint32_t)FSM_TIMER_COUNT; ++i)
@@ -78,6 +79,9 @@ void start_fsm(void)
         fsm_time_table[i].events = FSM_EVENTS_NONE;
         fsm_time_table[i].fsm = FSM_INVALID_ID;
     }
+
+    /* Serialize table/profile reset with concurrent append_event() calls. */
+    irq_state = fsm_port_irq_save();
 
     for (i = UINT32_C(0); i < (uint32_t)FSM_LAST; ++i)
     {
@@ -94,6 +98,9 @@ void start_fsm(void)
     fsm_profile_system = (fsm_profile_system_t){0};
 #endif
 
+    fsm_port_irq_restore(irq_state);
+
+    /* Port initialization stays outside the bounded table critical section. */
     fsm_port_time_init();
     fsm_last_time = fsm_port_time_now();
     fsm_timer_next_slot = UINT32_C(0);
@@ -123,6 +130,12 @@ fsm_t set_fsm(fsm_id_t fsm, fsm_t callback)
 
     fsm_t previous = fsm_table[(uint32_t)fsm].callback;
 
+    if (previous == NULL)
+    {
+        /* A zero-initialized slot has not yet been prepared by start_fsm(). */
+        return NULL;
+    }
+
     /* Timers belong to the old callback and must not reach the replacement. */
     remove_timers(fsm);
 
@@ -143,6 +156,11 @@ fsm_t remove_fsm(fsm_id_t fsm)
     }
 
     fsm_t previous = fsm_table[(uint32_t)fsm].callback;
+
+    if (previous == NULL)
+    {
+        return NULL;
+    }
 
     remove_timers(fsm);
 
@@ -354,7 +372,7 @@ static fsm_timer_id_t add_timer_internal(fsm_id_t fsm, fsm_duration_t delay, fsm
         return FSM_TIMER_INVALID_ID;
     }
 
-    if (fsm_table[(uint32_t)fsm].callback == null_fsm)
+    if ((fsm_table[(uint32_t)fsm].callback == NULL) || (fsm_table[(uint32_t)fsm].callback == null_fsm))
     {
         return FSM_TIMER_INVALID_ID;
     }

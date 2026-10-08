@@ -74,6 +74,10 @@ _Static_assert(sizeof(fsm_events_t) == sizeof(uint32_t), "fsm_events_t must rema
 _Static_assert(sizeof(fsm_timer_id_t) == (sizeof(uint32_t) * 2U), "fsm_timer_id_t must remain 8 bytes");
 
 #include "fsm_instance.h"
+
+_Static_assert(((uint64_t)FSM_TICK_FREQ_HZ >= UINT64_C(1)) && ((uint64_t)FSM_TICK_FREQ_HZ <= UINT32_MAX),
+               "FSM_TICK_FREQ_HZ must be in the range 1..UINT32_MAX");
+
 #include "fsm_port.h"
 
 #ifndef FSM_PORT_EVENT_POLL_REQUIRES_IRQ_LOCK
@@ -132,9 +136,6 @@ typedef enum
 } fsm_timer_result_t;
 
 /* Compile-time configuration contract. */
-_Static_assert(FSM_TICK_FREQ_HZ > UINT32_C(0),
-               "FSM_TICK_FREQ_HZ must be greater than zero");
-
 _Static_assert(FSM_LAST > 0,
                "At least one FSM must be declared");
 

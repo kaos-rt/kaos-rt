@@ -2,6 +2,7 @@
 #include "fsm_instance.h"
 #include "board.h"
 
+void SystemInit(void);
 
 static uint32_t controller_fsm(uint32_t state, fsm_events_t events)
 {

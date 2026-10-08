@@ -12,7 +12,7 @@ add_executable(kaos_posix_example
     ../../port/posix/fsm_port.c
 )
 
-target_compile_features(kaos_posix_example PRIVATE c_std_17)
+set_target_properties(kaos_posix_example PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 
 target_include_directories(kaos_posix_example PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}

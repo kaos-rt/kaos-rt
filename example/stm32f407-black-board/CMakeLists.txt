@@ -21,8 +21,11 @@ enable_language(C ASM)
 set(PROJECT_NAME kaos_stm32f407_black_board)
 set(KAOS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 
+option(KAOS_STRICT_WARNINGS "Treat strict compiler diagnostics as errors" ON)
+
 # Create an executable object type
 add_executable(${PROJECT_NAME})
+set_target_properties(${PROJECT_NAME} PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 
 # Include additional CMake files for flags, components, and files
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/flags.cmake)
@@ -46,6 +49,14 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_compile_options(${PROJECT_NAME} PRIVATE
   # User defined compiler options
 )
+
+if(KAOS_STRICT_WARNINGS AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(${PROJECT_NAME} PRIVATE
+    $<$<COMPILE_LANGUAGE:C>:-Wall;-Wextra;-Wpedantic;-Werror;-Wconversion;-Wsign-conversion;-Wshadow;-Wstrict-prototypes;-Wmissing-prototypes;-Wcast-qual;-Wformat=2;-Wswitch-enum>
+  )
+  # ST-generated libc stubs are defined without a separate declaration header.
+  set_source_files_properties(Src/syscall.c Src/sysmem.c PROPERTIES COMPILE_OPTIONS -Wno-missing-prototypes)
+endif()
 
 # Add additional defined symbols
 target_compile_definitions(${PROJECT_NAME} PRIVATE

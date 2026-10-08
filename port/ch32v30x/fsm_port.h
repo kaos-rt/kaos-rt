@@ -46,6 +46,9 @@ typedef struct
 
 #define FSM_PORT_SYSTICK ((fsm_port_systick_t *)UINT32_C(0xE000F000))
 
+_Static_assert(((uint64_t)FSM_SYSTICK_CLOCK_HZ >= UINT64_C(1000000)) && ((uint64_t)FSM_SYSTICK_CLOCK_HZ <= UINT32_MAX),
+    "FSM_SYSTICK_CLOCK_HZ must be in the range 1000000..UINT32_MAX");
+
 _Static_assert(
     (FSM_SYSTICK_CLOCK_HZ % FSM_TICK_FREQ_HZ) == UINT32_C(0),
     "SysTick clock must be an integer multiple of FSM_TICK_FREQ_HZ");

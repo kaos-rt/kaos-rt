@@ -8,12 +8,10 @@ target_compile_options(${PROJECT_NAME} PUBLIC
     # Compiler flags specific to Debug build type
     $<$<CONFIG:Debug>:
       $<$<COMPILE_LANGUAGE:C>: 
-        -std=c17
         -fstack-usage
         -Wall
         -Wextra
         -Wpedantic
-        -Wno-unused-parameter
         -O0
         -g3
         -ggdb
@@ -50,12 +48,10 @@ target_compile_options(${PROJECT_NAME} PUBLIC
     # Compiler flags specific to Release build type
     $<$<CONFIG:Release>:
       $<$<COMPILE_LANGUAGE:C>: 
-        -std=gnu11
         -fstack-usage
         -Wall
         -Wextra
         -Wpedantic
-        -Wno-unused-parameter
         -Os
       >
       $<$<COMPILE_LANGUAGE:CXX>: 
